@@ -1,5 +1,8 @@
 {
 	"dependencies": {
-		"fastify": "^5.8.5"
+		"@prisma/client": "^5.14.0",
+		"@repo/types": "workspace:^",
+		"fastify": "^5.8.5",
+		"prisma": "^5.14.0"
 	}
 }
