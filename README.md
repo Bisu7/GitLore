@@ -1,1 +1,1 @@
-# This project is underdevelopment now
+# This project is under development.
