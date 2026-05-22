@@ -1,8 +1,16 @@
 {
 	"dependencies": {
+		"@fastify/cookie": "^11.0.2",
+		"@fastify/jwt": "^10.1.0",
+		"@fastify/oauth2": "^8.2.0",
 		"@prisma/client": "^5.14.0",
 		"@repo/types": "workspace:^",
+		"dotenv": "^17.4.2",
 		"fastify": "^5.8.5",
 		"prisma": "^5.14.0"
+	},
+	"devDependencies": {
+		"@types/node": "^20",
+		"tsx": "^4.22.3"
 	}
 }
