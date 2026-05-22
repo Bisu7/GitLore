@@ -8,37 +8,106 @@ datasource db {
 }
 
 model User {
-  id            String         @id @default(cuid())
-  email         String         @unique
-  name          String?
-  githubId      String?        @unique
-  accessToken   String?
-  createdAt     DateTime       @default(now())
-  installations Installation[]
-  repos         Repo[]
+  id          String   @id @default(cuid())
+  githubId    String?  @unique
+  email       String   @unique
+  name        String?
+  avatarUrl   String?
+  accessToken String? // should be encrypted in practice
+  createdAt   DateTime @default(now())
+  repos       Repo[]
 }
 
 model Repo {
-  id             String         @id @default(cuid())
-  name           String
-  fullName       String
-  githubRepoId   String         @unique
-  userId         String
-  installationId String
-  status         String         @default("pending")
-  createdAt      DateTime       @default(now())
+  id                String            @id @default(cuid())
+  userId            String
+  githubRepoId      String            @unique
+  fullName          String
+  defaultBranch     String?
+  ingestionStatus   String            @default("pending")
+  ingestionProgress Float             @default(0)
+  createdAt         DateTime          @default(now())
   
-  user           User           @relation(fields: [userId], references: [id])
-  installations  Installation[]
+  user              User              @relation(fields: [userId], references: [id])
+  commits           Commit[]
+  prs               PR[]
+  embeddingChunks   EmbeddingChunk[]
 }
 
-model Installation {
-  id          String   @id @default(cuid())
-  userId      String
+model Commit {
+  id          String       @id @default(cuid())
   repoId      String
-  syncedAt    DateTime?
-  commitCount Int      @default(0)
+  sha         String
+  message     String
+  authorEmail String?
+  authorName  String?
+  timestamp   DateTime
+  parentShas  String[]
+  
+  repo        Repo         @relation(fields: [repoId], references: [id])
+  files       CommitFile[]
+  ticketRefs  TicketRef[]
+  prs         PR[]
+  chunks      EmbeddingChunk[]
+}
 
-  user        User     @relation(fields: [userId], references: [id])
-  repo        Repo     @relation(fields: [repoId], references: [id])
+model CommitFile {
+  id        String @id @default(cuid())
+  commitId  String
+  filePath  String
+  additions Int    @default(0)
+  deletions Int    @default(0)
+  patch     String?
+  
+  commit    Commit @relation(fields: [commitId], references: [id])
+}
+
+model TicketRef {
+  id         String @id @default(cuid())
+  commitId   String
+  source     String // e.g. JIRA, LINEAR, GITHUB
+  externalId String
+  rawRef     String
+  
+  commit     Commit @relation(fields: [commitId], references: [id])
+}
+
+model PR {
+  id             String      @id @default(cuid())
+  repoId         String
+  commitId       String?
+  githubPrNumber Int
+  title          String
+  body           String?
+  state          String
+  mergedAt       DateTime?
+  
+  repo           Repo        @relation(fields: [repoId], references: [id])
+  commit         Commit?     @relation(fields: [commitId], references: [id])
+  comments       PRComment[]
+}
+
+model PRComment {
+  id              String   @id @default(cuid())
+  prId            String
+  githubCommentId String   @unique
+  authorLogin     String
+  body            String
+  createdAt       DateTime
+  
+  pr              PR       @relation(fields: [prId], references: [id])
+}
+
+model EmbeddingChunk {
+  id        String   @id @default(cuid())
+  repoId    String
+  commitId  String?
+  content   String
+  metadata  Json
+  createdAt DateTime @default(now())
+  
+  // The vector column will be added manually in the migration below
+  
+  repo      Repo     @relation(fields: [repoId], references: [id])
+  commit    Commit?  @relation(fields: [commitId], references: [id])
 }
