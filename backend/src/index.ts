@@ -4,6 +4,7 @@ import fastifyJwt from '@fastify/jwt';
 import fastifyCookie from '@fastify/cookie';
 import { PrismaClient } from '@prisma/client';
 import dotenv from 'dotenv';
+import { Queue } from 'bullmq';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -11,10 +12,36 @@ declare module 'fastify' {
   }
 }
 
+declare module 'fastify' {
+  interface FastifyRequest {
+    user: { id: string; email: string };
+  }
+}
+
 dotenv.config();
 
 const prisma = new PrismaClient();
 const fastify = Fastify({ logger: true });
+
+const repoSyncQueue = new Queue('repo-sync', {
+  connection: {
+    host: '127.0.0.1',
+    port: 6379
+  }
+});
+
+const authenticate = async (request: any, reply: any) => {
+  try {
+    const token = request.cookies.gitlore_token;
+    if (!token) {
+      return reply.status(401).send({ error: 'Unauthorized' });
+    }
+    const decoded = fastify.jwt.verify(token);
+    request.user = decoded;
+  } catch (err) {
+    reply.status(401).send({ error: 'Unauthorized' });
+  }
+};
 
 // Register Cookie
 fastify.register(fastifyCookie);
@@ -35,7 +62,8 @@ fastify.register(fastifyOAuth2, {
     auth: fastifyOAuth2.GITHUB_CONFIGURATION
   },
   startRedirectPath: '/auth/github',
-  callbackUri: 'http://localhost:8080/auth/github/callback'
+  callbackUri: 'http://localhost:8080/auth/github/callback',
+  scope: ['read:user', 'user:email']
 });
 
 // Callback Route
@@ -107,6 +135,14 @@ fastify.get('/auth/github/callback', async function (request, reply) {
     reply.status(500).send('Authentication failed');
   }
 });
+
+fastify.get('/repos/available', { preHandler: authenticate }, async (request, reply) => {
+  const userId = request.user.id;
+
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+})
+
+
 
 // Start Server
 const start = async () => {

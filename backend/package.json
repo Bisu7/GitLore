@@ -8,8 +8,10 @@
 		"@fastify/oauth2": "^8.2.0",
 		"@prisma/client": "^5.14.0",
 		"@repo/types": "workspace:^",
+		"bullmq": "^5.77.6",
 		"dotenv": "^17.4.2",
 		"fastify": "^5.8.5",
+		"ioredis": "^5.11.0",
 		"prisma": "^5.14.0"
 	},
 	"devDependencies": {
