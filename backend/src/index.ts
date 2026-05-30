@@ -5,6 +5,12 @@ import fastifyCookie from '@fastify/cookie';
 import { PrismaClient } from '@prisma/client';
 import dotenv from 'dotenv';
 
+declare module 'fastify' {
+  interface FastifyInstance {
+    githubOAuth2: import('@fastify/oauth2').OAuth2Namespace;
+  }
+}
+
 dotenv.config();
 
 const prisma = new PrismaClient();
@@ -15,7 +21,7 @@ fastify.register(fastifyCookie);
 
 // Register JWT
 fastify.register(fastifyJwt, {
-  secret: process.env.JWT_SECRET || 'super_secret_jwt_key_please_change'
+  secret: process.env.JWT_SECRET || ''
 });
 
 // Register GitHub OAuth2
@@ -58,7 +64,7 @@ fastify.get('/auth/github/callback', async function (request, reply) {
         'User-Agent': 'GitLore-App'
       }
     });
-    
+
     let primaryEmail = githubUser.email;
     if (!primaryEmail && emailResponse.ok) {
       const emails: any = await emailResponse.json();
