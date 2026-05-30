@@ -1,4 +1,7 @@
 {
+	"scripts": {
+		"dev": "tsx watch src/index.ts"
+	},
 	"dependencies": {
 		"@fastify/cookie": "^11.0.2",
 		"@fastify/jwt": "^10.1.0",
