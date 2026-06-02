@@ -140,7 +140,33 @@ fastify.get('/repos/available', { preHandler: authenticate }, async (request, re
   const userId = request.user.id;
 
   const user = await prisma.user.findUnique({ where: { id: userId } });
-})
+
+  if (!user || !user.accessToken) {
+    return reply.status(400).send({ error: 'Github access token not found' });
+  }
+  const response = await fetch('https://api.github.com/user/repos?sort=updated&per_page=100', {
+    headers: {
+      Authorization: `Bearer ${user.accessToken}`,
+      Accept: 'application/vnd.github.v3+json',
+      'User-Agent': 'GitLore-App'
+    }
+  });
+  if (!response.ok) {
+    return reply.status(500).send({ error: 'Failed to fetch repositoris from Github' });
+  }
+  const repos = await response.json();
+  const mappedRepos = repos.map((repo: any) => ({
+    githubRepoId: repo.id.toString(),
+    name: repo.name,
+    fullName: repo.full_name,
+    private: repo.private,
+    language: repo.language,
+    stargazarsCount: repo.stargazars_count,
+    defaultBranch: repo.default_branch,
+  }));
+
+  return reply.send(mappedRepos);
+});
 
 
 
