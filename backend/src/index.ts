@@ -12,8 +12,8 @@ declare module 'fastify' {
   }
 }
 
-declare module 'fastify' {
-  interface FastifyRequest {
+declare module '@fastify/jwt' {
+  interface FastifyJWT {
     user: { id: string; email: string };
   }
 }
@@ -39,7 +39,7 @@ const authenticate = async (request: any, reply: any) => {
     const decoded = fastify.jwt.verify(token);
     request.user = decoded;
   } catch (err) {
-    reply.status(401).send({ error: 'Unauthorized' });
+    return reply.status(401).send({ error: 'Unauthorized' });
   }
 };
 
@@ -161,13 +161,37 @@ fastify.get('/repos/available', { preHandler: authenticate }, async (request, re
     fullName: repo.full_name,
     private: repo.private,
     language: repo.language,
-    stargazarsCount: repo.stargazars_count,
+    stargazersCount: repo.stargazers_count,
     defaultBranch: repo.default_branch,
   }));
 
   return reply.send(mappedRepos);
 });
 
+fastify.post('/repos/connect', { preHandler: authenticate }, async (request, reply) => {
+  const { githubRepoId, fullName, defaultBranch } = request.body as {
+    githubRepoId: string;
+    fullName: string;
+    defaultBranch: string;
+  };
+  const newRepo = await prisma.repo.create({
+    data: {
+      userId: request.user.id,
+      githubRepoId,
+      fullName,
+      defaultBranch,
+    },
+  });
+
+  await repoSyncQueue.add('sync', {
+    repoId: newRepo.id,
+  });
+
+  return {
+    success: true,
+    repo: newRepo,
+  };
+});
 
 
 // Start Server
