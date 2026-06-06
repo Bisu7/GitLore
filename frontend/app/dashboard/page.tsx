@@ -18,7 +18,10 @@ const LANG_COLORS: Record<string, string> = {
   "C++": "#f34b7d", CSS: "#563d7c", HTML: "#e34c26",
 };
 
+import { useRouter } from 'next/navigation';
+
 export default function DashboardPage() {
+  const router = useRouter();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [availableRepos, setAvailableRepos] = useState<GitHubRepo[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -57,7 +60,15 @@ export default function DashboardPage() {
         }),
       });
       if (!res.ok) throw new Error('Failed to connect repository');
+      
+      const data = await res.json();
+      
       setConnectedIds((prev) => new Set([...prev, repo.githubRepoId]));
+      
+      // Redirect to the newly connected repo dashboard
+      if (data.repo && data.repo.id) {
+        router.push(`/repo/${data.repo.id}`);
+      }
     } catch (err: any) {
       alert(err.message || 'Failed to connect repository');
     } finally {

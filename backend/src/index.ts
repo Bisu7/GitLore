@@ -174,8 +174,13 @@ fastify.post('/repos/connect', { preHandler: authenticate }, async (request, rep
     fullName: string;
     defaultBranch: string;
   };
-  const newRepo = await prisma.repo.create({
-    data: {
+  const newRepo = await prisma.repo.upsert({
+    where: { githubRepoId },
+    update: {
+      fullName,
+      defaultBranch,
+    },
+    create: {
       userId: request.user.id,
       githubRepoId,
       fullName,
@@ -183,9 +188,12 @@ fastify.post('/repos/connect', { preHandler: authenticate }, async (request, rep
     },
   });
 
-  await repoSyncQueue.add('sync', {
-    repoId: newRepo.id,
-  });
+  // Only trigger sync if it's new or still pending
+  if (newRepo.ingestionStatus === 'pending') {
+    await repoSyncQueue.add('sync', {
+      repoId: newRepo.id,
+    });
+  }
 
   return {
     success: true,
@@ -193,6 +201,149 @@ fastify.post('/repos/connect', { preHandler: authenticate }, async (request, rep
   };
 });
 
+
+import './workers/repoSync.worker';
+import './workers/embedCommits.worker';
+
+fastify.get('/repos/:repoId/status', { preHandler: authenticate }, async (request, reply) => {
+  const { repoId } = request.params as { repoId: string };
+  
+  const repo = await prisma.repo.findUnique({
+    where: { id: repoId },
+    select: { 
+      ingestionStatus: true, 
+      ingestionProgress: true,
+      fullName: true,
+      commits: {
+        orderBy: { timestamp: 'desc' },
+        take: 3,
+        select: {
+          sha: true,
+          message: true,
+          authorName: true,
+          timestamp: true
+        }
+      }
+    }
+  });
+
+  if (!repo) {
+    return reply.status(404).send({ error: 'Repo not found' });
+  }
+
+  return repo;
+});
+
+import { embedText } from './utils/embedding';
+
+fastify.post('/search', { preHandler: authenticate }, async (request, reply) => {
+  const { repoId, query, limit = 10 } = request.body as { repoId: string; query: string; limit?: number };
+  
+  if (!repoId || !query) {
+    return reply.status(400).send({ error: 'Missing repoId or query' });
+  }
+
+  // Verify access
+  const repo = await prisma.repo.findFirst({ where: { id: repoId, userId: request.user.id } });
+  if (!repo) return reply.status(403).send({ error: 'Unauthorized' });
+
+  // Embed the query
+  const queryVector = await embedText(query);
+  const vectorString = `[${queryVector.join(',')}]`;
+
+  // Semantic search query
+  const chunks: any[] = await prisma.$queryRaw`
+    SELECT ec."id", ec."commitId", ec."content", ec."metadata",
+           (ec."embedding" <=> ${vectorString}::vector) as distance
+    FROM "EmbeddingChunk" ec
+    WHERE ec."repoId" = ${repoId}
+    ORDER BY distance ASC
+    LIMIT ${Number(limit)}
+  `;
+
+  // Hydrate chunks with commit data
+  const commitIds = [...new Set(chunks.map(c => c.commitId))].filter(Boolean) as string[];
+  const commits = await prisma.commit.findMany({
+    where: { id: { in: commitIds } },
+    include: {
+      prs: true,
+      ticketRefs: true
+    }
+  });
+  
+  const commitMap = new Map(commits.map(c => [c.id, c]));
+  
+  const results = chunks.map(chunk => ({
+    id: chunk.id,
+    content: chunk.content,
+    distance: chunk.distance,
+    metadata: chunk.metadata,
+    commit: chunk.commitId ? commitMap.get(chunk.commitId) : null
+  }));
+
+  return { results };
+});
+
+import { GoogleGenAI } from '@google/genai';
+
+fastify.get('/commits/:sha', { preHandler: authenticate }, async (request, reply) => {
+  const { sha } = request.params as { sha: string };
+  const repoId = (request.query as any).repoId;
+
+  const commit = await prisma.commit.findFirst({
+    where: { sha, repoId },
+    include: { prs: { include: { comments: true } }, files: true }
+  });
+
+  if (!commit) return reply.status(404).send({ error: 'Commit not found' });
+  return commit;
+});
+
+fastify.post('/commits/:sha/explain', { preHandler: authenticate }, async (request, reply) => {
+  const { sha } = request.params as { sha: string };
+  const { repoId } = request.body as { repoId: string };
+
+  const commit = await prisma.commit.findFirst({
+    where: { sha, repoId },
+    include: { prs: { include: { comments: true } }, files: true }
+  });
+
+  if (!commit) return reply.status(404).send({ error: 'Commit not found' });
+
+  const prompt = `You are a senior developer reviewing a commit. Please explain this commit clearly and concisely.
+  
+Commit Message: ${commit.message}
+Author: ${commit.authorName}
+
+Files Changed:
+${commit.files.map(f => `- ${f.filePath}`).join('\n')}
+
+Pull Requests Context:
+${commit.prs.map(pr => `PR Title: ${pr.title}\nBody: ${pr.body}`).join('\n\n')}
+`;
+
+  reply.raw.setHeader('Content-Type', 'text/plain; charset=utf-8');
+  reply.raw.setHeader('Cache-Control', 'no-cache');
+  reply.raw.setHeader('Connection', 'keep-alive');
+
+  try {
+    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+    const responseStream = await ai.models.generateContentStream({
+      model: 'gemini-2.5-flash',
+      contents: prompt,
+    });
+
+    for await (const chunk of responseStream) {
+      if (chunk.text) {
+        reply.raw.write(chunk.text);
+      }
+    }
+  } catch (e: any) {
+    reply.raw.write(`\n\n[Error generating explanation: ${e.message}]`);
+  } finally {
+    reply.raw.end();
+  }
+});
 
 // Start Server
 const start = async () => {

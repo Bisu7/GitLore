@@ -106,7 +106,7 @@ model EmbeddingChunk {
   metadata  Json
   createdAt DateTime @default(now())
   
-  // The vector column will be added manually in the migration below
+  embedding Unsupported("vector(384)")?
   
   repo      Repo     @relation(fields: [repoId], references: [id])
   commit    Commit?  @relation(fields: [commitId], references: [id])
