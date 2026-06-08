@@ -14,7 +14,7 @@ export default function RepoPage({ params }: { params: Promise<{ repoId: string 
 
     const fetchStatus = async () => {
       try {
-        const res = await fetch(`/api/repos/${repoId}/status`);
+        const res = await fetch(`/api/repos/${repoId}/status?t=${Date.now()}`, { cache: 'no-store' });
         if (res.ok) {
           const data = await res.json();
           setStatus(data.ingestionStatus);

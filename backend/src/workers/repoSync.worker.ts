@@ -48,7 +48,7 @@ export const repoSyncWorker = new Worker('repo-sync', async (job) => {
         await simpleGit().clone(cloneUrl, repoPath);
         const git = simpleGit(repoPath);
 
-        const log = await git.log({ "--all": null });
+        const log = await git.log(['--all']);
         const commits = log.all;
         console.log(`Found ${commits.length} commits`);
 
@@ -56,18 +56,27 @@ export const repoSyncWorker = new Worker('repo-sync', async (job) => {
         let processedCommits = 0;
 
         for (const commit of commits) {
-            // Upsert commit
-            const dbCommit = await prisma.commit.create({
-                data: {
-                    repoId: repoId,
-                    sha: commit.hash,
-                    message: commit.message + (commit.body ? `\n\n${commit.body}` : ''),
-                    authorEmail: commit.author_email,
-                    authorName: commit.author_name,
-                    timestamp: new Date(commit.date),
-                    parentShas: [], // simple-git doesn't provide parents easily in standard log
-                }
+            // Upsert commit to prevent duplicates if multiple jobs run concurrently
+            let dbCommit = await prisma.commit.findFirst({
+                where: { repoId: repoId, sha: commit.hash }
             });
+            
+            if (!dbCommit) {
+                dbCommit = await prisma.commit.create({
+                    data: {
+                        repoId: repoId,
+                        sha: commit.hash,
+                        message: commit.message + (commit.body ? `\n\n${commit.body}` : ''),
+                        authorEmail: commit.author_email,
+                        authorName: commit.author_name,
+                        timestamp: new Date(commit.date),
+                        parentShas: [], // simple-git doesn't provide parents easily in standard log
+                    }
+                });
+            } else {
+                // If it already exists, skip processing its files to avoid duplicates
+                continue;
+            }
 
             // Extract Ticket Refs from message
             const ticketRegex = /([A-Z]+-\d+)|(#\d+)|(closes\s+#\d+)/gi;
@@ -98,19 +107,22 @@ export const repoSyncWorker = new Worker('repo-sync', async (job) => {
 
             // Extract changed files via show
             try {
-                const showOutput = await git.show(['--stat', '--format=', commit.hash]);
-                const lines = showOutput.split('\n').filter(l => l.includes('|'));
-                for (const line of lines) {
-                    const parts = line.split('|');
-                    if (parts.length >= 2) {
-                        const filePath = parts[0].trim();
-                        await prisma.commitFile.create({
-                            data: {
-                                commitId: dbCommit.id,
-                                filePath,
-                            }
-                        });
-                    }
+                const showOutput = await git.show(['--patch', '--format=', commit.hash]);
+                const patches = showOutput.split(/^diff --git /m).filter(p => p.trim().length > 0);
+                for (const patchChunk of patches) {
+                    const lines = patchChunk.split('\n');
+                    const firstLine = lines[0]; // e.g. "a/backend/.gitignore b/backend/.gitignore"
+                    const filePathMatch = firstLine.match(/^a\/(.*?)\s+b\/(.*)$/);
+                    if (!filePathMatch) continue;
+                    const filePath = filePathMatch[2] || filePathMatch[1];
+                    const patch = 'diff --git ' + patchChunk.trim();
+                    await prisma.commitFile.create({
+                        data: {
+                            commitId: dbCommit.id,
+                            filePath,
+                            patch
+                        }
+                    });
                 }
             } catch (err) {
                 // Ignore show error for specific commit

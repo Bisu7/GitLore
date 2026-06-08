@@ -167,7 +167,7 @@ export default function CommitPage({ params }: { params: Promise<{ repoId: strin
                   {selectedFile ? (
                     <Editor
                       height="100%"
-                      defaultLanguage="typescript"
+                      defaultLanguage="diff"
                       theme="vs-dark"
                       value={selectedFile.patch || "// No diff content available"}
                       options={{

@@ -168,6 +168,15 @@ fastify.get('/repos/available', { preHandler: authenticate }, async (request, re
   return reply.send(mappedRepos);
 });
 
+fastify.get('/repos/connected', { preHandler: authenticate }, async (request, reply) => {
+  const userId = request.user.id;
+  const repos = await prisma.repo.findMany({
+    where: { userId },
+    orderBy: { createdAt: 'desc' }
+  });
+  return reply.send(repos);
+});
+
 fastify.post('/repos/connect', { preHandler: authenticate }, async (request, reply) => {
   const { githubRepoId, fullName, defaultBranch } = request.body as {
     githubRepoId: string;
