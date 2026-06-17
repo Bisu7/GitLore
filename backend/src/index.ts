@@ -213,6 +213,7 @@ fastify.post('/repos/connect', { preHandler: authenticate }, async (request, rep
 
 import './workers/repoSync.worker';
 import './workers/embedCommits.worker';
+import './workers/buildGraph.worker';
 
 fastify.get('/repos/:repoId/status', { preHandler: authenticate }, async (request, reply) => {
   const { repoId } = request.params as { repoId: string };
@@ -293,6 +294,8 @@ fastify.post('/search', { preHandler: authenticate }, async (request, reply) => 
   return { results };
 });
 
+import { runQueryPlanner } from './agents/queryPlanner';
+
 fastify.post('/search/answer', { preHandler: authenticate }, async (request, reply) => {
   const { repoId, query } = request.body as { repoId: string; query: string };
   
@@ -304,106 +307,14 @@ fastify.post('/search/answer', { preHandler: authenticate }, async (request, rep
   const repo = await prisma.repo.findFirst({ where: { id: repoId, userId: request.user.id } });
   if (!repo) return reply.status(403).send({ error: 'Unauthorized' });
 
-  // Embed the query
-  const queryVector = await embedText(query);
-  const vectorString = `[${queryVector.join(',')}]`;
-
-  // Semantic search query - top 5
-  const chunks: any[] = await prisma.$queryRaw`
-    SELECT ec."id", ec."commitId", ec."content", ec."metadata",
-           (ec."embedding" <=> ${vectorString}::vector) as distance
-    FROM "EmbeddingChunk" ec
-    WHERE ec."repoId" = ${repoId}
-    ORDER BY distance ASC
-    LIMIT 5
-  `;
-
-  // Hydrate chunks with commit data
-  const commitIds = [...new Set(chunks.map(c => c.commitId))].filter(Boolean) as string[];
-  const commits = await prisma.commit.findMany({
-    where: { id: { in: commitIds } },
-    include: {
-      prs: {
-        include: { comments: true }
-      },
-      ticketRefs: true
-    }
-  });
-  
-  const commitMap = new Map(commits.map(c => [c.id, c]));
-
-  let contextStr = 'Context from Git History:\n\n';
-  const sources: any[] = [];
-
-  for (const chunk of chunks) {
-    const commit = chunk.commitId ? commitMap.get(chunk.commitId) : null;
-    if (!commit) continue;
-
-    sources.push({
-      sha: commit.sha,
-      message: commit.message
-    });
-
-    contextStr += `Commit SHA: ${commit.sha}\n`;
-    contextStr += `Message: ${commit.message}\n`;
-    
-    if (commit.prs && commit.prs.length > 0) {
-      contextStr += `Pull Requests:\n`;
-      commit.prs.forEach((pr: any) => {
-        contextStr += `- Title: ${pr.title}\n`;
-        if (pr.body) contextStr += `  Body: ${pr.body}\n`;
-        if (pr.comments && pr.comments.length > 0) {
-          contextStr += `  Comments:\n`;
-          pr.comments.forEach((c: any) => {
-            contextStr += `    - ${c.body}\n`;
-          });
-        }
-      });
-    }
-    contextStr += `\nChunk Content: ${chunk.content}\n\n`;
-  }
-
-  // Deduplicate sources
-  const uniqueSources = Array.from(new Map(sources.map(s => [s.sha, s])).values());
-
-  const prompt = `You are an expert at reading codebases and their history. Answer the user's question using only the commit context provided. Cite specific commit SHAs, PR numbers, and ticket references as evidence. Be precise and direct.\n\n${contextStr}\n\nUser Question: ${query}`;
-
   reply.raw.setHeader('Content-Type', 'text/event-stream');
   reply.raw.setHeader('Cache-Control', 'no-cache');
   reply.raw.setHeader('Connection', 'keep-alive');
 
   try {
-    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-    let responseStream;
-    try {
-      responseStream = await ai.models.generateContentStream({
-        model: 'gemini-2.5-pro',
-        contents: prompt,
-      });
-    } catch (err: any) {
-      if (err.message?.includes('503') || err.message?.includes('UNAVAILABLE')) {
-        // Fallback to 1.5-pro if 2.5-pro is busy
-        responseStream = await ai.models.generateContentStream({
-          model: 'gemini-1.5-pro',
-          contents: prompt,
-        });
-      } else {
-        throw err;
-      }
-    }
-
-    for await (const chunk of responseStream) {
-      if (chunk.text) {
-        reply.raw.write(`data: ${JSON.stringify({ chunk: chunk.text })}\n\n`);
-      }
-    }
-    reply.raw.write(`data: ${JSON.stringify({ done: true, sources: uniqueSources })}\n\n`);
-  } catch (e: any) {
-    const isBusy = e.message?.includes('503') || e.message?.includes('UNAVAILABLE');
-    const errMsg = isBusy 
-      ? "The Gemini API is experiencing high demand. Please try again later."
-      : e.message;
-    reply.raw.write(`data: ${JSON.stringify({ error: errMsg })}\n\n`);
+    await runQueryPlanner(query, repoId, reply);
+  } catch (err: any) {
+    reply.raw.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
   } finally {
     reply.raw.end();
   }

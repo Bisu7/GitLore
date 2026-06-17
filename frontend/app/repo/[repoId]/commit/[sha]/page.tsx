@@ -5,6 +5,7 @@ import Editor from '@monaco-editor/react';
 
 export default function CommitPage({ params }: { params: Promise<{ repoId: string; sha: string }> }) {
   const { repoId, sha } = use(params);
+  console.log("[DEBUG] CommitPage rendered for repo:", repoId, "sha:", sha);
   const [commit, setCommit] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [explanation, setExplanation] = useState('');
@@ -12,6 +13,7 @@ export default function CommitPage({ params }: { params: Promise<{ repoId: strin
   const [selectedFile, setSelectedFile] = useState<any>(null);
 
   useEffect(() => {
+    console.log("[DEBUG] Fetching commit data for:", sha);
     fetch(`/api/commits/${sha}?repoId=${repoId}`)
       .then(r => r.json())
       .then(data => {
