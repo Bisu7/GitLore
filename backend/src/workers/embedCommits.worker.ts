@@ -42,10 +42,8 @@ export const embedCommitsWorker = new Worker('embed-commits', async (job) => {
             }
         }
 
-        // Truncate to 6000 chars to avoid memory explosion during chunking if too large
         document = document.slice(0, 6000);
 
-        // Chunk Document
         const splitter = new RecursiveCharacterTextSplitter({
             chunkSize: 512,
             chunkOverlap: 64,
