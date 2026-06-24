@@ -53,11 +53,9 @@ export const embedCommitsWorker = new Worker('embed-commits', async (job) => {
 
         const extract = await getExtractor();
 
-        // Process and store each chunk
         for (let i = 0; i < chunks.length; i++) {
             const chunkText = chunks[i].pageContent;
 
-            // Generate Embedding (1D array of 384 floats)
             const output = await extract(chunkText, { pooling: 'mean', normalize: true });
             const vectorArray = Array.from(output.data);
 
