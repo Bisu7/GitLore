@@ -12,7 +12,6 @@ export const embedCommitsWorker = new Worker('embed-commits', async (job) => {
     try {
         const { commitId, repoId } = job.data;
 
-        // Fetch commit with PRs and Comments
         const commit = await prisma.commit.findUnique({
             where: { id: commitId },
             include: {
@@ -30,7 +29,6 @@ export const embedCommitsWorker = new Worker('embed-commits', async (job) => {
 
         console.log(`Embedding commit ${commit.sha}...`);
 
-        // Build Document String
         let document = `Commit Message: ${commit.message}\n`;
         document += `Author: ${commit.authorName || ''} <${commit.authorEmail || ''}>\n`;
 
@@ -38,7 +36,6 @@ export const embedCommitsWorker = new Worker('embed-commits', async (job) => {
             document += `\nPull Request: ${pr.title}\n`;
             if (pr.body) document += `PR Body: ${pr.body}\n`;
 
-            // Sort comments by length and get top 5
             const sortedComments = pr.comments.sort((a, b) => b.body.length - a.body.length).slice(0, 5);
             for (const comment of sortedComments) {
                 document += `Comment by ${comment.authorLogin}: ${comment.body}\n`;
@@ -65,7 +62,7 @@ export const embedCommitsWorker = new Worker('embed-commits', async (job) => {
             // Generate Embedding (1D array of 384 floats)
             const output = await extract(chunkText, { pooling: 'mean', normalize: true });
             const vectorArray = Array.from(output.data);
-            
+
             // Format for pgvector: '[0.1, 0.2, ...]'
             const vectorString = `[${vectorArray.join(',')}]`;
 
@@ -90,7 +87,7 @@ export const embedCommitsWorker = new Worker('embed-commits', async (job) => {
                 )
             `;
         }
-        
+
         console.log(`Successfully embedded ${chunks.length} chunks for commit ${commit.sha}`);
 
     } catch (err) {
