@@ -7,8 +7,6 @@ import IORedis from "ioredis";
 
 const prisma = new PrismaClient();
 
-// Removed IORedis instance as BullMQ can instantiate it directly from connection options
-
 export const repoSyncWorker = new Worker('repo-sync', async (job) => {
     try {
         const { repoId } = job.data;
@@ -60,7 +58,7 @@ export const repoSyncWorker = new Worker('repo-sync', async (job) => {
             let dbCommit = await prisma.commit.findFirst({
                 where: { repoId: repoId, sha: commit.hash }
             });
-            
+
             if (!dbCommit) {
                 dbCommit = await prisma.commit.create({
                     data: {
@@ -82,12 +80,12 @@ export const repoSyncWorker = new Worker('repo-sync', async (job) => {
             const ticketRegex = /([A-Z]+-\d+)|(#\d+)|(closes\s+#\d+)/gi;
             const fullMessage = `${commit.message} ${commit.body || ''}`;
             const matches = [...fullMessage.matchAll(ticketRegex)];
-            
+
             for (const match of matches) {
                 const rawRef = match[0];
                 let source = "UNKNOWN";
                 let externalId = rawRef;
-                
+
                 if (rawRef.match(/[A-Z]+-\d+/i)) {
                     source = "JIRA"; // or Linear
                 } else if (rawRef.match(/#\d+/)) {
@@ -180,7 +178,7 @@ export const repoSyncWorker = new Worker('repo-sync', async (job) => {
             }
 
             processedCommits++;
-            
+
             // Update progress every 50 commits
             if (processedCommits % 50 === 0) {
                 await prisma.repo.update({
@@ -200,13 +198,13 @@ export const repoSyncWorker = new Worker('repo-sync', async (job) => {
                 ingestionProgress: 100,
             }
         });
-        
+
         console.log(`Successfully processed ${processedCommits} commits for ${repo.fullName}`);
         console.log("Enqueuing commits for embedding...");
-        
+
         const { Queue } = require("bullmq");
         const embedQueue = new Queue('embed-commits', { connection: { host: '127.0.0.1', port: 6379 } });
-        
+
         for (const commit of commits) {
             // Need the DB commit ID, but we only have hash. Let's fetch it from DB to get the cuid
             const dbCommit = await prisma.commit.findFirst({
@@ -216,9 +214,9 @@ export const repoSyncWorker = new Worker('repo-sync', async (job) => {
                 await embedQueue.add('embed', { commitId: dbCommit.id, repoId });
             }
         }
-        
+
         console.log("Finished enqueuing embedding jobs");
-        
+
     } catch (err: any) {
         console.error("Worker failed", err);
         if (job.data.repoId) {
