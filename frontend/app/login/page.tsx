@@ -10,10 +10,8 @@ export default function LoginPage() {
         background: "#f5f4f0",
       }}
     >
-      {/* Left panel + right panel */}
       <div style={{ flex: 1, display: "flex", minHeight: "100vh" }}>
 
-        {/* Left — branding panel */}
         <div
           style={{
             flex: 1,
@@ -62,7 +60,6 @@ export default function LoginPage() {
           </p>
         </div>
 
-        {/* Right — login form */}
         <div
           style={{
             width: "480px",

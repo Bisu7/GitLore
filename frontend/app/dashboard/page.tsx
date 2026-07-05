@@ -75,11 +75,11 @@ export default function DashboardPage() {
         }),
       });
       if (!res.ok) throw new Error('Failed to connect repository');
-      
+
       const data = await res.json();
-      
+
       setConnectedIds((prev) => new Set([...prev, repo.githubRepoId]));
-      
+
       // Redirect to the newly connected repo dashboard
       if (data.repo && data.repo.id) {
         router.push(`/repo/${data.repo.id}`);
@@ -235,7 +235,6 @@ export default function DashboardPage() {
         <div className="gl-modal-overlay" onClick={(e) => e.target === e.currentTarget && setIsModalOpen(false)}>
           <div className="gl-modal">
 
-            {/* Modal header */}
             <div className="gl-modal-header">
               <div>
                 <h2
@@ -268,7 +267,6 @@ export default function DashboardPage() {
               </button>
             </div>
 
-            {/* Modal body */}
             <div className="gl-modal-body">
               {isLoading ? (
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "3rem 0", gap: "1rem" }}>
