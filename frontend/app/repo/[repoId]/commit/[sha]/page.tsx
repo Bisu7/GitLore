@@ -70,10 +70,8 @@ export default function CommitPage({ params }: { params: Promise<{ repoId: strin
         </div>
       </nav>
 
-      {/* Main content */}
       <main style={{ flex: 1, maxWidth: "1200px", margin: "0 auto", width: "100%", padding: "3rem 2rem", display: "grid", gridTemplateColumns: "1fr 350px", gap: "2rem" }}>
-        
-        {/* Left Column - Commit & Code */}
+
         <div style={{ display: "flex", flexDirection: "column", gap: "2rem" }}>
           <div className="gl-card">
             <h1 style={{ fontFamily: "'Instrument Serif', Georgia, serif", fontSize: "2rem", color: "#1a1917", marginBottom: "1rem", whiteSpace: "pre-wrap" }}>
@@ -88,13 +86,12 @@ export default function CommitPage({ params }: { params: Promise<{ repoId: strin
             </div>
           </div>
 
-          {/* AI Explanation Box */}
           <div className="gl-card" style={{ background: "#faf9f7", border: "1px solid #d8d5cf" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: explanation ? "1.5rem" : "0" }}>
               <h3 style={{ fontFamily: "'Inter', sans-serif", fontSize: "1rem", fontWeight: 600, color: "#1a1917", margin: 0 }}>
                 ✨ AI Commit Summary
               </h3>
-              <button 
+              <button
                 onClick={handleExplain}
                 disabled={explaining}
                 style={{
@@ -111,12 +108,12 @@ export default function CommitPage({ params }: { params: Promise<{ repoId: strin
                 {explaining ? "Analyzing..." : (explanation ? "Regenerate" : "Explain this commit")}
               </button>
             </div>
-            
+
             {explanation && (
-              <div style={{ 
-                fontFamily: "'Inter', sans-serif", 
-                fontSize: "0.9rem", 
-                color: "#1a1917", 
+              <div style={{
+                fontFamily: "'Inter', sans-serif",
+                fontSize: "0.9rem",
+                color: "#1a1917",
                 lineHeight: 1.6,
                 background: "#fff",
                 padding: "1.5rem",

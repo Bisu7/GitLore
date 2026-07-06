@@ -15,7 +15,6 @@ export default function SearchPage({ params }: { params: Promise<{ repoId: strin
   const [isGeneratingAnswer, setIsGeneratingAnswer] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Cmd+K shortcut
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
@@ -44,7 +43,7 @@ export default function SearchPage({ params }: { params: Promise<{ repoId: strin
       if (res.ok) {
         const data = await res.json();
         setResults(data.results || []);
-        
+
         if (data.results && data.results.length > 0) {
           generateAiAnswer(query);
         }
@@ -125,7 +124,7 @@ export default function SearchPage({ params }: { params: Promise<{ repoId: strin
 
       {/* Main content */}
       <main style={{ flex: 1, maxWidth: "900px", margin: "0 auto", width: "100%", padding: "3rem 2rem" }}>
-        
+
         <h1 style={{ fontFamily: "'Instrument Serif', Georgia, serif", fontSize: "2.5rem", color: "#1a1917", marginBottom: "2rem" }}>
           Search {repoId}
         </h1>
@@ -152,7 +151,7 @@ export default function SearchPage({ params }: { params: Promise<{ repoId: strin
             <span style={{ fontFamily: "ui-monospace, monospace", fontSize: "0.75rem", color: "#b8b3ab", background: "#f0ede8", padding: "0.25rem 0.5rem", borderRadius: "4px" }}>
               ⌘K
             </span>
-            <button 
+            <button
               type="submit"
               disabled={loading}
               style={{
@@ -173,20 +172,20 @@ export default function SearchPage({ params }: { params: Promise<{ repoId: strin
         {(aiAnswer || isGeneratingAnswer) && (
           <div className="gl-card" style={{ marginBottom: "2rem", border: "1px solid #e1dfda", background: "#ffffff" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "1rem" }}>
-              <span style={{ 
-                background: "linear-gradient(135deg, #a855f7 0%, #ec4899 100%)", 
-                WebkitBackgroundClip: "text", 
+              <span style={{
+                background: "linear-gradient(135deg, #a855f7 0%, #ec4899 100%)",
+                WebkitBackgroundClip: "text",
                 WebkitTextFillColor: "transparent",
                 fontFamily: "'Instrument Serif', Georgia, serif",
                 fontSize: "1.25rem"
               }}>✨ AI Answer</span>
               {isGeneratingAnswer && <span className="status-dot amber" style={{ marginLeft: "auto" }}></span>}
             </div>
-            
-            <div style={{ 
-              fontFamily: "'Inter', sans-serif", 
-              fontSize: "0.9375rem", 
-              color: "#1a1917", 
+
+            <div style={{
+              fontFamily: "'Inter', sans-serif",
+              fontSize: "0.9375rem",
+              color: "#1a1917",
               lineHeight: 1.6,
               whiteSpace: "pre-wrap"
             }}>
@@ -242,16 +241,16 @@ export default function SearchPage({ params }: { params: Promise<{ repoId: strin
           {results.map((result) => {
             const commit = result.commit as Record<string, string>;
             if (!commit) return null;
-            
+
             const shortSha = commit.sha.substring(0, 7);
             const date = new Date(commit.timestamp).toLocaleDateString();
 
             return (
-              <div 
-                key={result.id as string} 
-                className="gl-card" 
-                style={{ 
-                  cursor: "pointer", 
+              <div
+                key={result.id as string}
+                className="gl-card"
+                style={{
+                  cursor: "pointer",
                   transition: "transform 0.15s, box-shadow 0.15s",
                   border: "1px solid transparent",
                 }}
@@ -275,23 +274,23 @@ export default function SearchPage({ params }: { params: Promise<{ repoId: strin
                     {shortSha}
                   </span>
                 </div>
-                
+
                 <div style={{ fontFamily: "'Inter', sans-serif", fontSize: "0.8125rem", color: "#5a564f", marginBottom: "1rem" }}>
                   {commit.authorName} authored on {date}
                 </div>
-                
+
                 {result.metadata && (
                   <div style={{ fontFamily: "ui-monospace, monospace", fontSize: "0.75rem", color: "#908a82", marginBottom: "0.5rem" }}>
-                    {Object.entries(result.metadata as Record<string, string>).map(([k,v]) => `${k}: ${v}`).join(' | ')}
+                    {Object.entries(result.metadata as Record<string, string>).map(([k, v]) => `${k}: ${v}`).join(' | ')}
                   </div>
                 )}
-                
-                <div style={{ 
-                  fontFamily: "ui-monospace, monospace", 
-                  fontSize: "0.8125rem", 
-                  color: "#5a564f", 
-                  background: "#faf9f7", 
-                  padding: "1rem", 
+
+                <div style={{
+                  fontFamily: "ui-monospace, monospace",
+                  fontSize: "0.8125rem",
+                  color: "#5a564f",
+                  background: "#faf9f7",
+                  padding: "1rem",
                   borderRadius: "4px",
                   borderLeft: "3px solid #d8d5cf",
                   overflow: "hidden",
