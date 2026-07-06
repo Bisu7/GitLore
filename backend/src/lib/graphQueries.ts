@@ -4,7 +4,7 @@ export const getCommitsByFile = async (repoId: string, filePath: string) => {
     const driver = getNeo4jDriver();
     const session = driver.session();
     try {
-        const result = await session.executeRead(async tx => 
+        const result = await session.executeRead(async tx =>
             await tx.run(
                 `MATCH (c:Commit {repoId: $repoId})-[:TOUCHES]->(f:File {repoId: $repoId, path: $filePath})
                  RETURN c
@@ -42,7 +42,6 @@ export const getRelatedCommits = async (repoId: string, sha: string, hops: numbe
     const driver = getNeo4jDriver();
     const session = driver.session();
     try {
-        // We use string interpolation for hops as Cypher doesn't allow parameters for variable length relationship bounds
         const maxHops = Math.max(1, hops);
         const result = await session.executeRead(async tx =>
             await tx.run(

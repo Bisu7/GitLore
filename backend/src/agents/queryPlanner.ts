@@ -84,7 +84,7 @@ const executeVectorSearch = async (args: any) => {
         where: { id: { in: commitIds } },
         select: { sha: true, message: true, timestamp: true, authorName: true }
     });
-    
+
     return commits;
 };
 
@@ -118,10 +118,10 @@ export const runQueryPlanner = async (userQuery: string, repoId: string, replySt
     while (true) {
         let isFunctionCall = false;
         let accumulatedFunctionCalls: any[] = [];
-        
+
         try {
             const responseStream = await chat.sendMessageStream(messageContent);
-            
+
             for await (const chunk of responseStream) {
                 if (chunk.functionCalls && chunk.functionCalls.length > 0) {
                     isFunctionCall = true;
@@ -137,14 +137,13 @@ export const runQueryPlanner = async (userQuery: string, repoId: string, replySt
                 break;
             }
 
-            // Execute the function calls
             const functionResponses = [];
             for (const call of accumulatedFunctionCalls) {
                 let result;
                 try {
                     const args = call.args as any;
                     console.log(`[QueryPlanner] Executing ${call.name} with args:`, args);
-                    
+
                     if (call.name === 'vector_search') {
                         result = await executeVectorSearch(args);
                     } else if (call.name === 'graph_traverse') {
@@ -178,6 +177,6 @@ export const runQueryPlanner = async (userQuery: string, repoId: string, replySt
             break;
         }
     }
-    
+
     replyStream.raw.write(`data: ${JSON.stringify({ done: true })}\n\n`);
 };
