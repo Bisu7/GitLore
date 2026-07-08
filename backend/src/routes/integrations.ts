@@ -1,5 +1,7 @@
 import { error } from "console";
 import { FastifyInstance } from "fastify";
+import { request } from "http";
+import { buffer } from "stream/consumers";
 
 const authenticate = async (request: any, reply: any) => {
     try {
@@ -34,5 +36,27 @@ export default async function integrationRoutes(fastify: FastifyInstance) {
 
         const url = `https://auth.atlassian.com/authorize?${params.toString()}`;
         return reply.send({ url });
+    });
+
+    fastify.get('/integration/jira/callback', async (request: any, reply) => {
+        const { code, state } = request.query as { code: string; state: string };
+        const { repoId, userId } = JSON.parse(Buffer.from(state, 'base64').toString('utf-8'));
+
+        const tokenRes = await fetch('https://auth.atlassian.com/oauth/token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                grant_type: 'authorization_code',
+                client_id: process.env.JIRA_CLIENT_ID,
+                client_secret: process.env.JIRA_CLIENT_SECRET,
+                code,
+                redirect_url: process.env.JIRA_REDIRECT_URI,
+            }),
+        });
+        if (!tokenRes.ok) {
+            const err = await tokenRes.text();
+            console.log('[JIRA Callback] Token exchange Failed', err);
+            return reply.status(500).send({ error: 'Jira token exchange failed' });
+        }
     });
 }
