@@ -14,6 +14,16 @@ const authenticate = async (request: any, reply: any) => {
     }
 };
 
+// extract plain text from Jira Atlassian Doc format
+function adfToText(node: any): string {
+    if (!node) return '';
+    if (node.type == 'text') return node.text || '';
+    if (node.content && Array.isArray(node.content)) {
+        return node.content.map(adfToText).join(' ');
+    }
+    return '';
+}
+
 export default async function integrationRoutes(fastify: FastifyInstance) {
     fastify.get('/integrations/jira/connect', { preHandler: authenticate }, async (request: any, reply) => {
         const { repoId } = request.query as { repoId: string };
