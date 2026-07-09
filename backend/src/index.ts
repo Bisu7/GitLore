@@ -214,6 +214,9 @@ fastify.post('/repos/connect', { preHandler: authenticate }, async (request, rep
 import './workers/repoSync.worker';
 import './workers/embedCommits.worker';
 import './workers/buildGraph.worker';
+import integrationRoutes from './routes/integrations';
+
+fastify.register(integrationRoutes);
 
 fastify.get('/repos/:repoId/status', { preHandler: authenticate }, async (request, reply) => {
   const { repoId } = request.params as { repoId: string };
