@@ -15,3 +15,8 @@ def embed_text(text: str) -> list[float]:
     model = _get_model()
     vector = model.encode(text, normalize_embeddings=True)
     return vector.tolist()
+
+def identify_pattern(text:str) -> str:
+    words = text.split()
+    wordCount = words.count()
+    return wordCount
