@@ -58,6 +58,11 @@ class GitHubCallbackView(View):
             primary = next((e for e in emails if e.get('primary')), None)
             email = primary['email'] if primary else emails[0]['email']
 
+        # Encrypt access token
+        from cryptography.fernet import Fernet
+        f = Fernet(settings.FERNET_KEY.encode())
+        encrypted_token = f.encrypt(access_token.encode()).decode()
+
         # Upsert user
         user, _ = User.objects.update_or_create(
             github_id=str(github_user['id']),
@@ -65,7 +70,7 @@ class GitHubCallbackView(View):
                 'email': email,
                 'name': github_user.get('name') or github_user.get('login'),
                 'avatar_url': github_user.get('avatar_url'),
-                'access_token': access_token,
+                'access_token': encrypted_token,
             },
         )
 
