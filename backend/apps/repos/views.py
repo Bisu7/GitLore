@@ -6,7 +6,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 from apps.repos.models import Repo, Commit, User
-from workers.repo_sync import sync_repo
+from ingestion.tasks import ingest_repo
 import google.generativeai as genai
 
 
@@ -93,7 +93,8 @@ def repos_connect(request):
     )
 
     if repo.ingestion_status == 'pending':
-        sync_repo.delay(repo.id)
+        # Kick off Celery task
+        ingest_repo.delay(repo.id)
 
     return Response({
         'success': True,
