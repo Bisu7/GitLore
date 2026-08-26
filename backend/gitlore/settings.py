@@ -109,5 +109,6 @@ JIRA_REDIRECT_URI = os.getenv('JIRA_REDIRECT_URI', 'http://localhost:8080/integr
 LINEAR_CLIENT_ID = os.getenv('LINEAR_CLIENT_ID', '')
 LINEAR_CLIENT_SECRET = os.getenv('LINEAR_CLIENT_SECRET', '')
 LINEAR_REDIRECT_URI = os.getenv('LINEAR_REDIRECT_URI', 'http://localhost:8080/integrations/linear/callback')
+FERNET_KEY = os.getenv('FERNET_KEY', '')
 
 REPOS_TMP_DIR = BASE_DIR / 'tmp' / 'repos'
