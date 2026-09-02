@@ -108,7 +108,7 @@ class EmbeddingChunk(models.Model):
     content = models.TextField()
     metadata = models.JSONField(default=dict)
     created_at = models.DateTimeField(auto_now_add=True, db_column='createdAt')
-    embedding = VectorField(dimensions=384, null=True, blank=True)
+    embedding = VectorField(dimensions=3072, null=True, blank=True)
 
     class Meta:
         db_table = 'EmbeddingChunk'
