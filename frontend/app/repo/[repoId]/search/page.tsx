@@ -238,8 +238,8 @@ export default function SearchPage({ params }: { params: Promise<{ repoId: strin
             </div>
           )}
 
-          {results.map((result) => {
-            const commit = result.commit as Record<string, string>;
+          {results.map((result: any) => {
+            const commit = result.commit;
             if (!commit) return null;
 
             const shortSha = commit.sha.substring(0, 7);
@@ -247,7 +247,7 @@ export default function SearchPage({ params }: { params: Promise<{ repoId: strin
 
             return (
               <div
-                key={result.id as string}
+                key={result.chunk_id}
                 className="gl-card"
                 style={{
                   cursor: "pointer",
@@ -270,20 +270,21 @@ export default function SearchPage({ params }: { params: Promise<{ repoId: strin
                   <h3 style={{ fontFamily: "'Inter', sans-serif", fontSize: "1rem", fontWeight: 600, color: "#1a1917" }}>
                     {commit.message.split('\n')[0]}
                   </h3>
-                  <span style={{ fontFamily: "ui-monospace, monospace", fontSize: "0.75rem", color: "#908a82", background: "#f5f4f0", padding: "0.125rem 0.375rem", borderRadius: "3px" }}>
-                    {shortSha}
-                  </span>
+                  <div style={{ display: "flex", gap: "0.5rem" }}>
+                    {result.pr && (
+                      <span style={{ fontFamily: "'Inter', sans-serif", fontSize: "0.75rem", color: "#ec4899", background: "#fdf2f8", padding: "0.125rem 0.375rem", borderRadius: "3px" }}>
+                        PR #{result.pr.number}
+                      </span>
+                    )}
+                    <span style={{ fontFamily: "ui-monospace, monospace", fontSize: "0.75rem", color: "#908a82", background: "#f5f4f0", padding: "0.125rem 0.375rem", borderRadius: "3px" }}>
+                      {shortSha}
+                    </span>
+                  </div>
                 </div>
 
                 <div style={{ fontFamily: "'Inter', sans-serif", fontSize: "0.8125rem", color: "#5a564f", marginBottom: "1rem" }}>
-                  {commit.authorName} authored on {date}
+                  {commit.author_name} authored on {date}
                 </div>
-
-                {result.metadata && (
-                  <div style={{ fontFamily: "ui-monospace, monospace", fontSize: "0.75rem", color: "#908a82", marginBottom: "0.5rem" }}>
-                    {Object.entries(result.metadata as Record<string, string>).map(([k, v]) => `${k}: ${v}`).join(' | ')}
-                  </div>
-                )}
 
                 <div style={{
                   fontFamily: "ui-monospace, monospace",
@@ -299,7 +300,7 @@ export default function SearchPage({ params }: { params: Promise<{ repoId: strin
                   WebkitLineClamp: 3,
                   WebkitBoxOrient: "vertical"
                 }}>
-                  {result.content as string}
+                  {result.snippet}
                 </div>
               </div>
             );
