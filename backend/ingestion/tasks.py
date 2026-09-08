@@ -9,14 +9,8 @@ from cryptography.fernet import Fernet
 from apps.repos.models import Repo, Commit, CommitFile, TicketRef, PR, PRComment
 
 
-@shared_task(name='ingestion.tasks.embed_repo_commits')
-def embed_repo_commits(repo_id: str):
-    from workers.embed_commits import embed_commit
-    commits = Commit.objects.filter(repo_id=repo_id)
-    for commit in commits:
-        embed_commit.delay(commit.id, repo_id)
-    print(f'[Embed] Enqueued {commits.count()} embedding jobs for repo {repo_id}')
-
+# Import embed_repo_commits from embeddings.tasks
+from embeddings.tasks import embed_repo_commits
 
 @shared_task(name='ingestion.tasks.ingest_repo')
 def ingest_repo(repo_id: str):
