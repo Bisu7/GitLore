@@ -118,3 +118,8 @@ def embed_repo_commits(repo_id: str):
         print(f'[Embed] Successfully inserted {len(db_chunks_to_create)} embedding chunks for repo {repo_id}')
     else:
         print(f'[Embed] No embedding chunks were created')
+        
+    # Chain graph builder task
+    from graph.tasks import build_repo_graph
+    build_repo_graph.delay(repo_id)
+    print(f'[Embed] Chained build_repo_graph for repo {repo_id}')
