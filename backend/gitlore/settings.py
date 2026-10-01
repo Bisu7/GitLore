@@ -21,6 +21,7 @@ INSTALLED_APPS = [
     'apps.search',
     'apps.integrations',
     'pgvector.django',
+    'graph',
 ]
 
 MIDDLEWARE = [
