@@ -86,7 +86,11 @@ def _execute_vector_search(args: dict) -> list:
     repo_id = args.get('repoId', '')
     limit = int(args.get('limit', 5))
 
-    vector = embed_text(query)
+    import openai
+    client = openai.OpenAI(api_key=settings.OPENAI_API_KEY)
+    response = client.embeddings.create(model="text-embedding-3-large", input=[query])
+    vector = response.data[0].embedding
+
     vector_str = '[' + ','.join(str(v) for v in vector) + ']'
 
     with connection.cursor() as cur:
@@ -120,6 +124,8 @@ def run_query_planner(user_query: str, repo_id: str) -> Generator[dict, None, No
     )
     chat = model.start_chat(enable_automatic_function_calling=False)
     message = f'User Query: {user_query}\nRepository ID: {repo_id}'
+    
+    sources_map = {}
 
     while True:
         response = chat.send_message(message, stream=False)
@@ -147,6 +153,8 @@ def run_query_planner(user_query: str, repo_id: str) -> Generator[dict, None, No
             try:
                 if name == 'vector_search':
                     result = _execute_vector_search(args)
+                    for c in result:
+                        sources_map[c['sha']] = {'sha': c['sha'], 'message': c['message'], 'author': c['authorName']}
                 elif name == 'graph_traverse':
                     result = graph_traverse(
                         args['repoId'], args['startNodeType'], args['startNodeProperty'],
@@ -158,6 +166,8 @@ def run_query_planner(user_query: str, repo_id: str) -> Generator[dict, None, No
                     result = get_module_activity(
                         args['repoId'], args['moduleName'], args['fromDate'], args['toDate']
                     )
+                    # If this returns commits, let's track them too if possible
+                    # But it returns neo4j Nodes. Let's just rely on vector_search for basic source tracking for now.
                 else:
                     result = {'error': f'Unknown function: {name}'}
             except Exception as e:
@@ -175,4 +185,4 @@ def run_query_planner(user_query: str, repo_id: str) -> Generator[dict, None, No
         # Feed results back to model
         message = function_responses
 
-    yield {'done': True}
+    yield {'done': True, 'sources': list(sources_map.values())}
