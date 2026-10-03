@@ -20,14 +20,34 @@ INSTALLED_APPS = [
     'apps.auth_app',
     'apps.search',
     'apps.integrations',
+    'apps.billing',
     'pgvector.django',
     'graph',
 ]
+
+# Sentry monitoring
+SENTRY_DSN = os.getenv('SENTRY_DSN', '')
+if SENTRY_DSN:
+    try:
+        import sentry_sdk
+        sentry_sdk.init(
+            dsn=SENTRY_DSN,
+            traces_sample_rate=1.0,
+            profiles_sample_rate=1.0,
+        )
+    except Exception as e:
+        print(f"[Sentry Init Error]: {e}")
+
+ADMIN_SECRET = os.getenv('ADMIN_SECRET', 'gitlore-admin-secret-dev')
+STRIPE_SECRET_KEY = os.getenv('STRIPE_SECRET_KEY', '')
+STRIPE_WEBHOOK_SECRET = os.getenv('STRIPE_WEBHOOK_SECRET', '')
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.middleware.common.CommonMiddleware',
+    'lib.rate_limit.RateLimitMiddleware',
+    'lib.perf_monitoring.PerformanceMonitoringMiddleware',
 ]
 
 ROOT_URLCONF = 'gitlore.urls'
