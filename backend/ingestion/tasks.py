@@ -47,10 +47,28 @@ def ingest_repo(repo_id: str):
         total = len(commits)
         print(f'Found {total} commits')
 
+        # Large repo handling (> 50k commits)
+        if total > 50000:
+            repo.is_partial_history = True
+            repo.save(update_fields=['is_partial_history'])
+            print(f'Large repo detected ({total} commits). Switched to partial history (24 months).')
+
+        from lib.plan_limits import get_history_cutoff_months
+        from django.utils import timezone
+        from datetime import timedelta, datetime
+        cutoff_months = get_history_cutoff_months(user, repo)
+        cutoff_timestamp = None
+        if cutoff_months:
+            cutoff_timestamp = int((timezone.now() - timedelta(days=cutoff_months * 30)).timestamp())
+
         processed = 0
         ticket_regex = re.compile(r'([A-Z]+-\d+)|(#\d+)|(closes\s+#\d+)', re.IGNORECASE)
 
         for git_commit in commits:
+            # Skip if older than cutoff
+            if cutoff_timestamp and git_commit.committed_date < cutoff_timestamp:
+                continue
+
             # Skip if already exists
             if Commit.objects.filter(repo=repo, sha=git_commit.hexsha).exists():
                 processed += 1
@@ -150,6 +168,9 @@ def ingest_repo(repo_id: str):
 
         Repo.objects.filter(id=repo_id).update(ingestion_status='COMPLETE', ingestion_progress=100)
         print(f'Sync complete: {processed} commits for {repo.full_name}')
+
+        from lib.cache import invalidate_repo_cache
+        invalidate_repo_cache(repo_id)
 
         # Chain the embedding task
         embed_repo_commits.delay(repo_id)
