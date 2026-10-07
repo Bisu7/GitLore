@@ -1,16 +1,19 @@
 import json
+import time
 from django.db import connection
 from django.http import StreamingHttpResponse
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
-from apps.repos.models import Repo, Commit, EmbeddingChunk
+from apps.repos.models import Repo, Commit, EmbeddingChunk, QueryLog
 from lib.embedding import embed_text
+from lib.plan_limits import check_query_limit, record_usage
+from lib.cache import make_key, get_cached, set_cached
 
 # ── /search ───────────────────────────────────────────────────────────────────
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([AllowAny])
 def search(request):
     repo_id = request.data.get('repoId')
     query = request.data.get('query')
@@ -19,9 +22,33 @@ def search(request):
     if not repo_id or not query:
         return Response({'error': 'Missing repoId or query'}, status=400)
 
-    user = request.user
-    if not Repo.objects.filter(id=repo_id, user=user).exists():
-        return Response({'error': 'Unauthorized'}, status=403)
+    # Check repo existence and demo status
+    repo = Repo.objects.filter(id=repo_id).first()
+    if not repo:
+        return Response({'error': 'Repo not found'}, status=404)
+
+    user = getattr(request, 'user', None)
+
+    # Demo repo allows public access without authentication
+    if not repo.is_demo:
+        if not user or not user.is_authenticated:
+            return Response({'error': 'Authentication required'}, status=401)
+        if repo.user_id != user.id:
+            return Response({'error': 'Unauthorized'}, status=403)
+
+        # Enforce query limits for FREE tier (HTTP 402)
+        allowed, limit_error = check_query_limit(user, repo)
+        if not allowed:
+            return Response(limit_error, status=402)
+
+        # Record usage
+        record_usage(user, repo, 'QUERY')
+
+    # Check Redis cache for /search results (TTL: 15 minutes = 900 seconds)
+    cache_key = make_key('search', repo_id, f"{query}:{limit}")
+    cached_data = get_cached(cache_key)
+    if cached_data is not None:
+        return Response({'results': cached_data, 'cached': True})
 
     # Embed query using OpenAI
     import openai
@@ -68,7 +95,7 @@ def search(request):
                 'sha': commit_obj.sha,
                 'message': commit_obj.message,
                 'author_name': commit_obj.author_name,
-                'timestamp': commit_obj.timestamp,
+                'timestamp': commit_obj.timestamp.isoformat() if commit_obj.timestamp else None,
             },
             'pr': {
                 'number': pr_obj.github_pr_number,
@@ -77,13 +104,16 @@ def search(request):
             'snippet': ch['content'][:300],
         })
 
+    # Cache results for 15 minutes (900 seconds)
+    set_cached(cache_key, results, 900)
+
     return Response({'results': results})
 
 
 # ── /search/answer ────────────────────────────────────────────────────────────
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([AllowAny])
 def search_answer(request):
     repo_id = request.data.get('repoId')
     query = request.data.get('query')
@@ -91,76 +121,51 @@ def search_answer(request):
     if not repo_id or not query:
         return Response({'error': 'Missing repoId or query'}, status=400)
 
-    user = request.user
-    if not Repo.objects.filter(id=repo_id, user=user).exists():
-        return Response({'error': 'Unauthorized'}, status=403)
+    repo = Repo.objects.filter(id=repo_id).first()
+    if not repo:
+        return Response({'error': 'Repo not found'}, status=404)
+
+    user = getattr(request, 'user', None)
+
+    # Demo repo allows public access without authentication
+    if not repo.is_demo:
+        if not user or not user.is_authenticated:
+            return Response({'error': 'Authentication required'}, status=401)
+        if repo.user_id != user.id:
+            return Response({'error': 'Unauthorized'}, status=403)
+
+        # Enforce query limits for FREE tier (HTTP 402)
+        allowed, limit_error = check_query_limit(user, repo)
+        if not allowed:
+            return Response(limit_error, status=402)
+
+        record_usage(user, repo, 'QUERY')
+
+    start_time = time.time()
 
     def sse_stream():
+        from agents.query_planner import run_query_planner
+        source_commit_count = 0
         try:
-            import openai
-            from django.conf import settings
-            import google.generativeai as genai
-            
-            # 1. Embed query
-            client = openai.OpenAI(api_key=settings.OPENAI_API_KEY)
-            res_emb = client.embeddings.create(model="text-embedding-3-large", input=[query])
-            vector = res_emb.data[0].embedding
-            vector_str = '[' + ','.join(str(v) for v in vector) + ']'
-            
-            # 2. Run pgvector search for top 5 chunks
-            with connection.cursor() as cur:
-                cur.execute(
-                    """
-                    SELECT ec."commitId", ec."content"
-                    FROM "EmbeddingChunk" ec
-                    WHERE ec."repoId" = %s
-                    ORDER BY (ec."embedding" <=> %s::vector) ASC
-                    LIMIT 5
-                    """,
-                    [repo_id, vector_str],
-                )
-                chunks = cur.fetchall()
-            
-            # 3. Build context string and sources
-            commit_ids = list({c[0] for c in chunks})
-            commits = {c.id: c for c in Commit.objects.filter(id__in=commit_ids)}
-            
-            context_pieces = []
-            sources_map = {}
-            
-            for commit_id, content in chunks:
-                c_obj = commits.get(commit_id)
-                if not c_obj:
-                    continue
-                date = str(c_obj.timestamp)
-                context_pieces.append(f"Commit {c_obj.sha} by {c_obj.author_name} on {date}:\n{content}")
-                
-                if c_obj.sha not in sources_map:
-                    sources_map[c_obj.sha] = {
-                        "sha": c_obj.sha,
-                        "message": c_obj.message,
-                        "author": c_obj.author_name
-                    }
-                    
-            context_str = "\n\n".join(context_pieces)
-            
-            # 4. Call Gemini
-            system_prompt = "You are an expert software historian. Answer the developer's question using only the commit context below. Cite specific commit SHAs and PR numbers as evidence. Be direct and precise."
-            full_prompt = f"{system_prompt}\n\nContext:\n{context_str}\n\nQuestion: {query}"
-            
-            genai.configure(api_key=settings.GEMINI_API_KEY)
-            model = genai.GenerativeModel('gemini-2.5-flash')
-            res_gen = model.generate_content(full_prompt, stream=True)
-            
-            # 5. Stream chunks
-            for chunk in res_gen:
-                if chunk.text:
-                    yield f'data: {json.dumps({"chunk": chunk.text})}\n\n'
-                    
-            yield f'data: {json.dumps({"done": True, "sources": list(sources_map.values())})}\n\n'
-            
+            for event in run_query_planner(query, repo_id):
+                if event.get('type') == 'commit_results' or 'commits' in event:
+                    commits_list = event.get('commits', [])
+                    source_commit_count = max(source_commit_count, len(commits_list))
+                yield f'data: {json.dumps(event)}\n\n'
         except Exception as e:
             yield f'data: {json.dumps({"error": str(e)})}\n\n'
+        finally:
+            elapsed_ms = int((time.time() - start_time) * 1000)
+            try:
+                QueryLog.objects.create(
+                    user=user if (user and user.is_authenticated) else None,
+                    repo=repo,
+                    question=query,
+                    response_time_ms=elapsed_ms,
+                    source_commit_count=source_commit_count,
+                )
+            except Exception as log_err:
+                print(f"[QueryLog Error]: {log_err}")
 
     response = StreamingHttpResponse(sse_stream(), content_type='text/event-stream')
     response['Cache-Control'] = 'no-cache'
