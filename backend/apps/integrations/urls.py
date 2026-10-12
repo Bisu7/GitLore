@@ -4,6 +4,7 @@ from .views import (
     linear_connect, LinearCallbackView,
     integrations_status, tickets_count,
 )
+from .slack import slack_webhook
 
 urlpatterns = [
     path('integrations/jira/connect', jira_connect),
@@ -12,4 +13,5 @@ urlpatterns = [
     path('integrations/linear/callback', LinearCallbackView.as_view()),
     path('repos/<str:repo_id>/integrations', integrations_status),
     path('repos/<str:repo_id>/tickets/count', tickets_count),
+    path('integrations/slack/webhook', slack_webhook),
 ]
