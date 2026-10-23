@@ -10,6 +10,10 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        migrations.RunSQL(
+            sql='UPDATE "EmbeddingChunk" SET "embedding" = NULL;',
+            reverse_sql=migrations.RunSQL.noop,
+        ),
         migrations.AlterField(
             model_name="embeddingchunk",
             name="embedding",
@@ -17,26 +21,31 @@ class Migration(migrations.Migration):
                 blank=True, dimensions=3072, null=True
             ),
         ),
-        migrations.AlterField(
-            model_name="user",
-            name="access_token",
-            field=models.TextField(blank=True, db_column="accessToken", null=True),
-        ),
-        migrations.AlterField(
-            model_name="user",
-            name="avatar_url",
-            field=models.URLField(blank=True, db_column="avatarUrl", null=True),
-        ),
-        migrations.AlterField(
-            model_name="user",
-            name="created_at",
-            field=models.DateTimeField(auto_now_add=True, db_column="createdAt"),
-        ),
-        migrations.AlterField(
-            model_name="user",
-            name="github_id",
-            field=models.CharField(
-                blank=True, db_column="githubId", max_length=64, null=True, unique=True
-            ),
+        migrations.SeparateDatabaseAndState(
+            state_operations=[
+                migrations.AlterField(
+                    model_name="user",
+                    name="access_token",
+                    field=models.TextField(blank=True, db_column="accessToken", null=True),
+                ),
+                migrations.AlterField(
+                    model_name="user",
+                    name="avatar_url",
+                    field=models.URLField(blank=True, db_column="avatarUrl", null=True),
+                ),
+                migrations.AlterField(
+                    model_name="user",
+                    name="created_at",
+                    field=models.DateTimeField(auto_now_add=True, db_column="createdAt"),
+                ),
+                migrations.AlterField(
+                    model_name="user",
+                    name="github_id",
+                    field=models.CharField(
+                        blank=True, db_column="githubId", max_length=64, null=True, unique=True
+                    ),
+                ),
+            ],
+            database_operations=[],
         ),
     ]
