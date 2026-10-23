@@ -6,6 +6,8 @@ export const metadata: Metadata = {
   description: "GitLore indexes your Git history, pull requests, and commits into a searchable knowledge base. Understand why every line of code exists.",
 };
 
+import UpgradeModal from "./components/UpgradeModal";
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -13,7 +15,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" data-scroll-behavior="smooth">
-      <body>{children}</body>
+      <body>
+        {children}
+        <UpgradeModal />
+      </body>
     </html>
   );
 }
