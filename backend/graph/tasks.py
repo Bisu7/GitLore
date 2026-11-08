@@ -119,3 +119,100 @@ def build_repo_graph(repo_id: str):
             session.execute_write(process_commit, commit_data)
             
     print(f"[Graph] Finished building graph for repo {repo_id}")
+
+
+from django.utils import timezone
+from datetime import timedelta
+from apps.repos.models import Repo, Commit, CommitFile, ModuleSnapshot
+import json
+import numpy as np
+from django.conf import settings
+import openai
+import google.generativeai as genai
+
+@shared_task(name='graph.tasks.detect_architecture_drift')
+def detect_architecture_drift():
+    now = timezone.now()
+    thirty_days_ago = now - timedelta(days=30)
+    
+    repos = Repo.objects.all()
+    client = openai.OpenAI(api_key=settings.OPENAI_API_KEY)
+    genai.configure(api_key=settings.GEMINI_API_KEY)
+    model = genai.GenerativeModel('gemini-2.5-flash')
+    
+    for repo in repos:
+        # Get all distinct modules in the last 30 days
+        files = CommitFile.objects.filter(commit__repo_id=repo.id, commit__timestamp__gte=thirty_days_ago)
+        module_counts = {}
+        for f in files:
+            parts = pathlib.Path(f.file_path).parts
+            mod = parts[0] if len(parts) > 1 else '/'
+            if mod not in module_counts:
+                module_counts[mod] = []
+            module_counts[mod].append(f)
+            
+        for mod, mod_files in module_counts.items():
+            # top 20 most changed files
+            file_freq = {}
+            for mf in mod_files:
+                file_freq[mf.file_path] = file_freq.get(mf.file_path, 0) + 1
+            
+            top_files = sorted(file_freq.keys(), key=lambda k: file_freq[k], reverse=True)[:20]
+            
+            # Get their last commit messages
+            doc_parts = []
+            for tf in top_files:
+                last_commit = Commit.objects.filter(repo_id=repo.id, files__file_path=tf).order_by('-timestamp').first()
+                msg = last_commit.message if last_commit else ''
+                doc_parts.append(f"{tf}: {msg}")
+                
+            doc = "\n".join(doc_parts)[:4000]
+            
+            # Embed
+            response = client.embeddings.create(model="text-embedding-3-large", input=[doc])
+            vector = response.data[0].embedding
+            
+            # Find snapshot from 30 days ago
+            prev_snap = ModuleSnapshot.objects.filter(repo_id=repo.id, module_name=mod, snapshot_date__lte=thirty_days_ago).order_by('-snapshot_date').first()
+            
+            similarity = None
+            drift_score = None
+            ai_explanation = None
+            is_drifting = False
+            
+            if prev_snap and prev_snap.embedding:
+                v1 = np.array(vector)
+                v2 = np.array(prev_snap.embedding)
+                similarity = float(np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2)))
+                
+                if similarity < 0.82:
+                    is_drifting = True
+                    drift_score = 1.0 - similarity
+                    
+                    old_doc = prev_snap.metadata.get('doc', '')
+                    prompt = f"A software module called '{mod}' has architecturally drifted. Its state 30 days ago focused on: {old_doc}. Its current state focuses on: {doc}. Write 2 sentences explaining what architectural shift occurred and what the team should review."
+                    
+                    try:
+                        res = model.generate_content(prompt)
+                        ai_explanation = res.text
+                    except Exception as e:
+                        ai_explanation = f"Error generating explanation: {e}"
+                        
+                    # Enqueue drift alert
+                    from apps.integrations.slack import send_slack_drift_alert
+                    import sys, os
+                    sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+                    from lib.email import send_drift_alert_email
+                    send_slack_drift_alert(repo.id, mod, ai_explanation)
+                    send_drift_alert_email(repo.user, repo, mod, ai_explanation)
+                        
+            ModuleSnapshot.objects.create(
+                repo=repo,
+                module_name=mod,
+                snapshot_date=now,
+                similarity_to_previous=similarity,
+                drift_score=drift_score,
+                ai_explanation=ai_explanation,
+                embedding=vector,
+                metadata={'doc': doc, 'is_drifting': is_drifting}
+            )
